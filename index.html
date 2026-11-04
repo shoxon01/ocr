@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skaner OCR — kitobdan matn ajratish</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Skaner OCR</h1>
+  <span class="sub">Skaner kitoblardan matn ajratish. Fayllar kompyuteringizdan chiqmaydi.</span>
+</header>
+
+<main>
+  <aside id="left">
+    <section>
+      <h2>1. Fayl</h2>
+      <div id="drop">PDF yoki rasmlarni shu yerga tashlang</div>
+      <div class="row">
+        <button id="btnFiles" class="primary">Fayl tanlash</button>
+        <button id="btnCam">Kamera</button>
+      </div>
+      <input id="fileInput" type="file" accept="application/pdf,image/*" multiple hidden>
+      <input id="camFallback" type="file" accept="image/*" capture="environment" hidden>
+      <div id="fileInfo" class="hint"></div>
+    </section>
+
+    <section>
+      <h2>2. Sozlama</h2>
+      <div class="label">O‘qish usuli</div>
+      <div class="seg" id="engineSeg">
+        <button type="button" data-v="ocr" class="on">Oflayn<small>Tesseract · rasm kompyuterdan chiqmaydi</small></button>
+        <button type="button" data-v="ai">AI<small>Gemini / Claude · formulalarni aniqroq o‘qiydi</small></button>
+      </div>
+      <select id="engine" hidden>
+        <option value="ocr" selected>Oflayn</option>
+        <option value="ai">AI</option>
+      </select>
+      <div id="aiBox" hidden>
+        <div id="aiKeys"></div>
+        <button type="button" id="aiAdd" class="small">+ AI qo‘shish</button>
+        <div class="hint">Kalit faqat shu brauzerda saqlanadi. Sahifa rasmlari Google yoki Anthropic serveriga yuboriladi. Gemini kaliti: aistudio.google.com → Get API key (bepul). <b>Bir nechta AI</b> qo‘shsangiz, sahifalar ular orasida navbat bilan bo‘linadi: AI 1 — 1, 3, 5…, AI 2 — 2, 4, 6… sahifa. Biri limitga yetsa, qolganlari uning sahifalarini oladi.</div>
+      </div>
+      <div class="offline-only">
+      <div class="label">Matn tili (bir nechtasini tanlash mumkin)</div>
+      <div id="langs" class="checks">
+        <label><input type="checkbox" value="uzb" checked> O‘zbek (lotin)</label>
+        <label><input type="checkbox" value="uzb_cyrl"> O‘zbek (kirill)</label>
+        <label><input type="checkbox" value="rus"> Rus</label>
+        <label><input type="checkbox" value="eng"> Ingliz</label>
+      </div>
+      <div class="hint">Kitobda bir tildan ortig‘i bo‘lmasa, bittasini tanlang: aniqroq va tezroq.</div>
+      </div>
+      <div class="grid2">
+        <label>Aniqlik
+          <select id="quality">
+            <option value="2200">Tez</option>
+            <option value="3000" selected>Yaxshi</option>
+            <option value="4000">Eng yaxshi (sekin)</option>
+          </select>
+        </label>
+        <label>Parallel
+          <select id="lanes"></select>
+        </label>
+      </div>
+      <div class="checks">
+        <label class="offline-only" title="Xira skanni tiniqlashtiradi (kulrang, kontrast, o‘tkirlik)"><input type="checkbox" id="optEnh" checked> Tasvirni yaxshilash</label>
+        <label title="Chizmalarni topib alohida rasm qiladi, matnga [Rasm N] belgisi qo‘yadi"><input type="checkbox" id="optFigs" checked> Rasmlarni ajratish</label>
+        <label class="offline-only" title="« » → < >, 1O5 → 105, BN → 8N, o` → oʻ"><input type="checkbox" id="optPhys" checked> Fizika tuzatishlari</label>
+      </div>
+      <div class="grid2">
+        <label>Ustunlar
+          <select id="cols">
+            <option value="0" selected>Avto</option>
+            <option value="1">1 ta</option>
+            <option value="2">2 ta</option>
+            <option value="3">3 ta</option>
+            <option value="4">4 ta</option>
+          </select>
+        </label>
+        <label title="Sahifa tepasi va pastidagi sarlavha / javoblar jadvalini o‘tkazib yuboradi">Tepa va past chekkani kesish
+          <select id="cut">
+            <option value="0" selected>Kesilmasin</option>
+            <option value="5">5%</option>
+            <option value="8">8%</option>
+            <option value="12">12%</option>
+          </select>
+        </label>
+      </div>
+      <label class="block">Sahifa tuzilishi
+        <select id="psm">
+          <option value="3" selected>Avto (ustunlar, rasmlar)</option>
+          <option value="6">Bitta matn bloki</option>
+          <option value="4">Bitta ustun, turli o‘lcham</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="grow">
+      <h2>3. Sahifalar <span id="selCount" class="muted"></span></h2>
+      <div class="row">
+        <button id="selAll">Hammasi</button>
+        <button id="selNone">Hech biri</button>
+        <input id="rangeInp" placeholder="1-5, 8, 10-12" aria-label="Sahifa oralig‘i">
+        <button id="selRange">Belgilash</button>
+      </div>
+      <div id="pages" class="pages"></div>
+    </section>
+
+    <section class="sticky">
+      <div class="row">
+        <button id="btnRun" class="primary big" disabled>Matnni o‘qish</button>
+        <button id="btnStop" class="big" hidden>To‘xtatish</button>
+      </div>
+      <div id="progWrap" hidden>
+        <div class="bar"><div id="bar"></div></div>
+        <div id="progText" class="hint"></div>
+      </div>
+    </section>
+  </aside>
+
+  <section id="right">
+    <div class="toolbar">
+      <button id="btnCopy" disabled>Nusxa olish</button>
+      <button id="btnTxt" disabled>.txt saqlash</button>
+      <button id="btnDocx" disabled>.docx saqlash</button>
+      <button id="btnImgs" disabled>Rasmlar (.zip)</button>
+      <button id="btnTest" class="primary" disabled title="Savollarga bo‘ladi, variant va rasmlarni biriktiradi, Test yechish ilovasi uchun fayl yozadi">Testga tayyorlash</button>
+      <span class="sep"></span>
+      <label><input type="checkbox" id="optHeads" checked> Sahifa sarlavhalari</label>
+      <label title="Satr oxiridagi uzilishlarni olib tashlaydi. Formulali sahifalarda o‘chirib qo‘ying.">
+        <input type="checkbox" id="optJoin"> Satrlarni birlashtirish</label>
+      <label>Saqlanadi
+        <select id="optWhat">
+          <option value="orig">Asl matn</option>
+          <option value="trans">Tarjima</option>
+          <option value="both">Ikkalasi</option>
+        </select>
+      </label>
+    </div>
+    <div class="toolbar">
+      <b>Tarjima</b>
+      <label>Tilga
+        <select id="trTo">
+          <option value="uz">O‘zbek</option>
+          <option value="ru">Rus</option>
+          <option value="en">Ingliz</option>
+        </select>
+      </label>
+      <label>Usul
+        <select id="trMode">
+          <option value="auto">Avto</option>
+          <option value="local">Brauzer ichida (oflayn)</option>
+          <option value="online">Onlayn (Google)</option>
+        </select>
+      </label>
+      <button id="btnTr" disabled>Tarjima qilish</button>
+      <span id="trStatus" class="hint"></span>
+    </div>
+    <div id="results">
+      <div class="empty">Natija shu yerda chiqadi. Chapdan fayl tanlang yoki kamera bilan suratga oling.</div>
+    </div>
+  </section>
+</main>
+
+<dialog id="camDlg">
+  <div class="dlg">
+    <video id="camVideo" autoplay playsinline muted></video>
+    <div class="row">
+      <select id="camSel" aria-label="Kamera"></select>
+      <button id="camShot" class="primary">Suratga olish</button>
+      <button id="camClose">Tayyor</button>
+    </div>
+    <div id="camInfo" class="hint">Kitob sahifasini tekis, yorug‘likda va ramkaga to‘liq sig‘diring.</div>
+  </div>
+</dialog>
+
+<dialog id="tpDlg" class="wide">
+  <div class="dlg tp">
+    <div class="tphead">
+      <h2>Testga tayyorlash <span id="tpCount" class="muted"></span></h2>
+      <div class="row">
+        <input id="tpTitle" type="text" placeholder="Test nomi">
+        <input id="tpSection" type="text" placeholder="Bo‘lim yoki mavzu raqami (ixtiyoriy)">
+      </div>
+      <div class="row">
+        <input id="tpKey" type="text" placeholder="Javoblar kaliti: 11-A 12-B 13-C …" class="grow">
+        <button id="tpKeyApply">Kalitni qo‘llash</button>
+        <span id="tpKeyInfo" class="hint"></span>
+      </div>
+      <div class="row">
+        <button id="tpDocx" class="primary">.docx (test ilovasi uchun, rasmlar bilan)</button>
+        <button id="tpTxt">.txt (rasmsiz)</button>
+        <span class="sp"></span>
+        <button id="tpClose">Yopish</button>
+      </div>
+      <div class="hint">Dumaloq belgi — to‘g‘ri javob. Rasm noto‘g‘ri savolga tushgan bo‘lsa, uni ro‘yxatdan boshqa savolga ko‘chiring.</div>
+    </div>
+    <div id="tpList"></div>
+  </div>
+</dialog>
+
+<dialog id="feDlg" class="wide">
+  <div class="dlg tp">
+    <div class="tphead">
+      <h2>Rasmlarni tuzatish <span id="feInfo" class="muted"></span></h2>
+      <div class="row">
+        <button id="feSave" class="primary">Saqlash</button>
+        <button id="feClose">Bekor qilish</button>
+        <button id="feDel" disabled>Tanlanganni o‘chirish</button>
+      </div>
+      <div class="hint">Bo‘sh joyni sudrab — yangi rasm maydoni. Maydonni sudrab ko‘chiring, burchak nuqtalaridan o‘lchamini o‘zgartiring. Delete — o‘chirish.</div>
+    </div>
+    <div id="feWrap"><div id="feStage"><canvas id="feCanvas"></canvas><div id="feOverlay"></div></div></div>
+  </div>
+</dialog>
+
+<dialog id="viewDlg">
+  <div class="dlg">
+    <div id="viewBox"></div>
+    <div class="row"><button id="viewClose">Yopish</button></div>
+  </div>
+</dialog>
+
+<script src="vendor/tesseract/tesseract.min.js"></script>
+<script src="vendor/docx/docx.iife.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
